@@ -1,0 +1,119 @@
+blueprint:
+  name: "ZHA - IKEA RODRET Control de Brillo Continuo"
+  description: "Control de luces mediante mando IKEA RODRET (ZHA). Permite On/Off y regulación continua de brillo mediante pulsación larga."
+  domain: automation
+  input:
+    remote:
+      name: Mando RODRET
+      description: Selecciona el dispositivo IKEA RODRET.
+      selector:
+        device:
+          integration: zha
+          manufacturer: IKEA of Sweden
+          model: RODRET Dimmer
+    light_target:
+      name: Luz / Grupo de luces
+      description: La luz que será controlada.
+      selector:
+        target:
+          entity:
+            domain: light
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: device
+    domain: zha
+    device_id: !input remote
+    type: remote_button_short_press
+    subtype: turn_on
+    id: "on"
+  - platform: device
+    domain: zha
+    device_id: !input remote
+    type: remote_button_short_press
+    subtype: turn_off
+    id: "off"
+  - platform: device
+    domain: zha
+    device_id: !input remote
+    type: remote_button_long_press
+    subtype: turn_on
+    id: "brillo_up"
+  - platform: device
+    domain: zha
+    device_id: !input remote
+    type: remote_button_long_press
+    subtype: turn_off
+    id: "brillo_down"
+
+action:
+  - choose:
+      # Encendido simple
+      - conditions:
+          - condition: trigger
+            id: "on"
+        sequence:
+          - service: light.turn_on
+            target: !input light_target
+
+      # Apagado simple
+      - conditions:
+          - condition: trigger
+            id: "off"
+        sequence:
+          - service: light.turn_off
+            target: !input light_target
+
+      # Aumentar brillo (Loop)
+      - conditions:
+          - condition: trigger
+            id: "brillo_up"
+        sequence:
+          - repeat:
+              while:
+                - condition: template
+                  value_template: "{{ repeat.index < 20 }}" # Seguridad para evitar bucle infinito
+              sequence:
+                - service: light.turn_on
+                  target: !input light_target
+                  data:
+                    brightness_step_pct: 10
+                    transition: 0.5
+                - wait_for_trigger:
+                    - platform: device
+                      domain: zha
+                      device_id: !input remote
+                      type: remote_button_long_release
+                      subtype: turn_on
+                  timeout:
+                    milliseconds: 500
+                - condition: template
+                  value_template: "{{ wait.trigger != none }}" # Si se detecta el release ('stop'), sale del loop
+                  
+      # Disminuir brillo (Loop)
+      - conditions:
+          - condition: trigger
+            id: "brillo_down"
+        sequence:
+          - repeat:
+              while:
+                - condition: template
+                  value_template: "{{ repeat.index < 20 }}"
+              sequence:
+                - service: light.turn_on
+                  target: !input light_target
+                  data:
+                    brightness_step_pct: -10
+                    transition: 0.5
+                - wait_for_trigger:
+                    - platform: device
+                      domain: zha
+                      device_id: !input remote
+                      type: remote_button_long_release
+                      subtype: turn_off
+                  timeout:
+                    milliseconds: 500
+                - condition: template
+                  value_template: "{{ wait.trigger != none }}"
