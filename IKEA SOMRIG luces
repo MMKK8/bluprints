@@ -1,8 +1,9 @@
 blueprint:
-  name: IKEA SOMRIG (ZHA) - Control Integral de Luces
+  name: IKEA SOMRIG (ZHA) - Control de Iluminación
   description: >
-    Control total para el botón IKEA SOMRIG (E2213) vía ZHA.
-    Permite encender/apagar y regular el brillo (dimming) mediante pulsación larga.
+    Control integral para el botón IKEA SOMRIG (E2213) usando ZHA.
+    - Botón Arriba: Encender (corto), Subir brillo (largo).
+    - Botón Abajo: Apagar (corto), Bajar brillo (largo).
   domain: automation
   input:
     somrig_device:
@@ -11,7 +12,7 @@ blueprint:
       selector:
         device:
           model: SOMRIG shortcut button
-          filter_buy_integration: zha
+          integration: zha
     target_light:
       name: Luz / Grupo de luces
       description: Entidad de iluminación a controlar.
@@ -42,26 +43,29 @@ action:
   - variables:
       command: "{{ trigger.event.data.command }}"
       cluster: "{{ trigger.event.data.cluster_id }}"
+      # El SOMRIG envía argumentos en una lista [step_mode, step_size, transition_time]
       args: "{{ trigger.event.data.args }}"
 
   - choose:
-      # --- BOTÓN ARRIBA: Encender ---
+      # --- BOTÓN ARRIBA (Puntos): Encender ---
       - conditions:
-          - condition: template
-            value_template: "{{ command == 'on' and cluster == 6 }}"
+          - "{{ command == 'on' }}"
+          - "{{ cluster == 6 }}"
         sequence:
           - service: light.turn_on
             target: !input target_light
 
-      # --- BOTÓN ARRIBA: Subir Brillo (Long Press) ---
+      # --- BOTÓN ARRIBA: Subir Brillo (Pulsación larga) ---
+      # args[0] == 0 significa 'Up'
       - conditions:
-          - condition: template
-            value_template: "{{ command == 'step' and cluster == 8 and args[0] == 0 }}"
+          - "{{ command == 'step' }}"
+          - "{{ cluster == 8 }}"
+          - "{{ args[0] == 0 }}"
         sequence:
           - repeat:
               while:
                 - condition: template
-                  value_template: "true" # Se detiene por el modo restart al soltar (stop)
+                  value_template: "true"
               sequence:
                 - service: light.turn_on
                   target: !input target_light
@@ -70,18 +74,20 @@ action:
                 - delay:
                     milliseconds: !input dim_speed
 
-      # --- BOTÓN ABAJO: Apagar ---
+      # --- BOTÓN ABAJO (Círculo): Apagar ---
       - conditions:
-          - condition: template
-            value_template: "{{ command == 'off' and cluster == 6 }}"
+          - "{{ command == 'off' }}"
+          - "{{ cluster == 6 }}"
         sequence:
           - service: light.turn_off
             target: !input target_light
 
-      # --- BOTÓN ABAJO: Bajar Brillo (Long Press) ---
+      # --- BOTÓN ABAJO: Bajar Brillo (Pulsación larga) ---
+      # args[0] == 1 significa 'Down'
       - conditions:
-          - condition: template
-            value_template: "{{ command == 'step' and cluster == 8 and args[0] == 1 }}"
+          - "{{ command == 'step' }}"
+          - "{{ cluster == 8 }}"
+          - "{{ args[0] == 1 }}"
         sequence:
           - repeat:
               while:
@@ -95,11 +101,11 @@ action:
                 - delay:
                     milliseconds: !input dim_speed
 
-      # --- DETENER ACCIÓN (Al soltar el botón) ---
+      # --- PARAR ACCIÓN (Al soltar cualquier botón) ---
       - conditions:
-          - condition: template
-            value_template: "{{ command == 'stop' and cluster == 8 }}"
+          - "{{ command == 'stop' }}"
+          - "{{ cluster == 8 }}"
         sequence:
-          - stop: "El botón ha sido soltado"
+          - stop: "Botón soltado, deteniendo bucle de brillo"
 
     default: []
