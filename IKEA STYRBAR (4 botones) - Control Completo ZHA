@@ -1,5 +1,5 @@
 blueprint:
-  name: "IKEA STYRBAR (4 botones) - Control Completo ZHA G"
+  name: "IKEA STYRBAR (4 botones) - Control Completo ZHA"
   description: "Control de dispositivos mediante el mando IKEA STYRBAR (E2001/E2002) a través de ZHA."
   domain: automation
   input:
