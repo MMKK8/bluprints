@@ -1,0 +1,105 @@
+blueprint:
+  name: IKEA SOMRIG (ZHA) - Control Integral de Luces
+  description: >
+    Control total para el botón IKEA SOMRIG (E2213) vía ZHA.
+    Permite encender/apagar y regular el brillo (dimming) mediante pulsación larga.
+  domain: automation
+  input:
+    somrig_device:
+      name: Dispositivo SOMRIG
+      description: Selecciona el mando IKEA SOMRIG.
+      selector:
+        device:
+          model: SOMRIG shortcut button
+          filter_buy_integration: zha
+    target_light:
+      name: Luz / Grupo de luces
+      description: Entidad de iluminación a controlar.
+      selector:
+        target:
+          entity:
+            domain: light
+    dim_speed:
+      name: Velocidad de regulación
+      description: Tiempo entre pasos de brillo (ms).
+      default: 500
+      selector:
+        number:
+          min: 100
+          max: 2000
+          unit_of_measurement: ms
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: event
+    event_type: zha_event
+    event_data:
+      device_id: !input somrig_device
+
+action:
+  - variables:
+      command: "{{ trigger.event.data.command }}"
+      cluster: "{{ trigger.event.data.cluster_id }}"
+      args: "{{ trigger.event.data.args }}"
+
+  - choose:
+      # --- BOTÓN ARRIBA: Encender ---
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'on' and cluster == 6 }}"
+        sequence:
+          - service: light.turn_on
+            target: !input target_light
+
+      # --- BOTÓN ARRIBA: Subir Brillo (Long Press) ---
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'step' and cluster == 8 and args[0] == 0 }}"
+        sequence:
+          - repeat:
+              while:
+                - condition: template
+                  value_template: "true" # Se detiene por el modo restart al soltar (stop)
+              sequence:
+                - service: light.turn_on
+                  target: !input target_light
+                  data:
+                    brightness_step_pct: 10
+                - delay:
+                    milliseconds: !input dim_speed
+
+      # --- BOTÓN ABAJO: Apagar ---
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'off' and cluster == 6 }}"
+        sequence:
+          - service: light.turn_off
+            target: !input target_light
+
+      # --- BOTÓN ABAJO: Bajar Brillo (Long Press) ---
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'step' and cluster == 8 and args[0] == 1 }}"
+        sequence:
+          - repeat:
+              while:
+                - condition: template
+                  value_template: "true"
+              sequence:
+                - service: light.turn_on
+                  target: !input target_light
+                  data:
+                    brightness_step_pct: -10
+                - delay:
+                    milliseconds: !input dim_speed
+
+      # --- DETENER ACCIÓN (Al soltar el botón) ---
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'stop' and cluster == 8 }}"
+        sequence:
+          - stop: "El botón ha sido soltado"
+
+    default: []
