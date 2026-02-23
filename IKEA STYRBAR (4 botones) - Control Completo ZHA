@@ -1,0 +1,114 @@
+blueprint:
+  name: "IKEA STYRBAR (4 botones) - Control Completo ZHA G"
+  description: "Control de dispositivos mediante el mando IKEA STYRBAR (E2001/E2002) a través de ZHA."
+  domain: automation
+  input:
+    remote:
+      name: "Mando STYRBAR"
+      description: "Selecciona el mando IKEA STYRBAR que deseas configurar."
+      selector:
+        device:
+          integration: zha
+          manufacturer: IKEA of Sweden
+          model: "Remote Control N2"
+    up_short:
+      name: "Botón Arriba - Pulsación Corta"
+      default: []
+      selector:
+        action: {}
+    up_long:
+      name: "Botón Arriba - Pulsación Larga"
+      default: []
+      selector:
+        action: {}
+    down_short:
+      name: "Botón Abajo - Pulsación Corta"
+      default: []
+      selector:
+        action: {}
+    down_long:
+      name: "Botón Abajo - Pulsación Larga"
+      default: []
+      selector:
+        action: {}
+    left_short:
+      name: "Botón Izquierda - Pulsación Corta"
+      default: []
+      selector:
+        action: {}
+    left_long:
+      name: "Botón Izquierda - Pulsación Larga"
+      default: []
+      selector:
+        action: {}
+    right_short:
+      name: "Botón Derecha - Pulsación Corta"
+      default: []
+      selector:
+        action: {}
+    right_long:
+      name: "Botón Derecha - Pulsación Larga"
+      default: []
+      selector:
+        action: {}
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: event
+    event_type: zha_event
+    event_data:
+      device_id: !input remote
+
+action:
+  - variables:
+      command: "{{ trigger.event.data.command }}"
+      cluster_id: "{{ trigger.event.data.cluster_id }}"
+      endpoint_id: "{{ trigger.event.data.endpoint_id }}"
+      args: "{{ trigger.event.data.args }}"
+
+  - choose:
+      # BOTÓN ARRIBA (ON / BRIGHTNESS UP)
+      - conditions:
+          - "{{ command == 'on' }}"
+        sequence: !input up_short
+      - conditions:
+          - "{{ command == 'step_with_on_off' }}"
+          - "{{ args[0] == 0 }}"
+        sequence: !input up_long
+
+      # BOTÓN ABAJO (OFF / BRIGHTNESS DOWN)
+      - conditions:
+          - "{{ command == 'off' }}"
+        sequence: !input down_short
+      - conditions:
+          - "{{ command == 'step' }}"
+          - "{{ args[0] == 1 }}"
+        sequence: !input down_long
+
+      # BOTÓN IZQUIERDA (LEFT / HOLD)
+      - conditions:
+          - "{{ command == 'press' }}"
+          - "{{ args[0] == 257 }}"
+        sequence: !input left_short
+      - conditions:
+          - "{{ command == 'hold' }}"
+          - "{{ args[0] == 3329 }}"
+        sequence: !input left_long
+
+      # BOTÓN DERECHA (RIGHT / HOLD)
+      - conditions:
+          - "{{ command == 'press' }}"
+          - "{{ args[0] == 256 }}"
+        sequence: !input right_short
+      - conditions:
+          - "{{ command == 'hold' }}"
+          - "{{ args[0] == 3328 }}"
+        sequence: !input right_long
+
+      # STOP COMMAND (Manejo de Release para evitar bucles de pulsación larga)
+      - conditions:
+          - "{{ command in ['stop', 'release'] }}"
+        sequence:
+          - stop: "Pulsación larga finalizada"
